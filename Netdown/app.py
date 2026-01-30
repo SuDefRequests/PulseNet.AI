@@ -4,7 +4,7 @@ import pandas as pd
 
 app = Flask(__name__)
 
-# Load trained model & scaler
+#  model & scaler
 model = joblib.load("network_model.pkl")
 scaler = joblib.load("scaler.pkl")
 
@@ -43,7 +43,7 @@ def index():
         scaled_data = scaler.transform(data)
         seconds = max(0, model.predict(scaled_data)[0])
 
-        # Human-friendly time display
+        # Human friendly time display in S and Minutes
         if seconds < 60:
             prediction = f"🚨 Network failure predicted in {int(seconds)} seconds"
         else:
@@ -61,6 +61,8 @@ def index():
     return render_template("index.html",
                            prediction=prediction,
                            severity=severity)
+
+#run logic 
 
 if __name__ == "__main__":
     app.run(debug=True)
