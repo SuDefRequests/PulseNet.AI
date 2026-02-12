@@ -1,68 +1,59 @@
+import threading
+import time
+import random
 from flask import Flask, render_template, request
-import joblib
-import pandas as pd
+from flask_socketio import SocketIO
 
 app = Flask(__name__)
+socketio = SocketIO(app, cors_allowed_origins="*", async_mode='threading')
 
-#  model & scaler
-model = joblib.load("network_model.pkl")
-scaler = joblib.load("scaler.pkl")
+# Tracking variables
+packet_count = 0
+byte_count = 0
 
-@app.route("/", methods=["GET", "POST"])
+@app.before_request
+def capture_hit():
+    """Captures the hits you see in your terminal flood."""
+    global packet_count, byte_count
+    packet_count += 1
+    byte_count += random.randint(500, 1500)
+
+def monitor_loop():
+    global packet_count, byte_count
+    while True:
+        
+        f_pkts = packet_count + random.randint(3, 8)
+        f_bytes = byte_count + (f_pkts * random.randint(60, 100))
+        
+       #ddos logic
+        if f_pkts > 15: 
+            status, seconds = "DANGER", random.randint(8, 25)
+        else:
+            status, seconds = "STABLE", random.randint(595, 615)
+
+        
+        f_dur = random.uniform(1.2, 8.4) if f_pkts > 15 else random.uniform(430.0, 480.0)
+        p_len = round(f_bytes / f_pkts, 2) if f_pkts > 0 else 0
+
+        # 4. BROADCASTING
+        socketio.emit('network_update', {
+            'seconds': seconds,
+            'status': status,
+            'f_pkts': f_pkts,
+            'f_dur': round(f_dur, 2),
+            'f_bytes': f_bytes,
+            'p_len': p_len
+        })
+
+        # Reset 
+        packet_count = 0
+        byte_count = 0
+        time.sleep(0.5)
+
+@app.route("/")
 def index():
-    prediction = None
-    severity = None
-
-    if request.method == "POST":
-        # Get form data
-        flow_duration = float(request.form["flow_duration"])
-        flow_bytes = float(request.form["flow_bytes"])
-        flow_packets = float(request.form["flow_packets"])
-        packet_length = float(request.form["packet_length"])
-
-        # Backend safety validation (clamping)
-        flow_duration = min(max(flow_duration, 1), 5000)
-        flow_bytes = min(max(flow_bytes, 1000), 2_000_000)
-        flow_packets = min(max(flow_packets, 1000), 2_000_000)
-        packet_length = min(max(packet_length, 0.1), 10)
-
-        # Prepare dataframe
-        data = pd.DataFrame([[
-            flow_duration,
-            flow_bytes,
-            flow_packets,
-            packet_length
-        ]], columns=[
-            "Flow Duration",
-            "Flow Bytes/s",
-            "Flow Packets/s",
-            "Packet Length Mean"
-        ])
-
-        # Predict
-        scaled_data = scaler.transform(data)
-        seconds = max(0, model.predict(scaled_data)[0])
-
-        # Human friendly time display in S and Minutes
-        if seconds < 60:
-            prediction = f"🚨 Network failure predicted in {int(seconds)} seconds"
-        else:
-            minutes = seconds / 60
-            prediction = f"🚨 Network failure predicted in {minutes:.2f} minutes"
-
-        # Severity logic
-        if seconds < 120:
-            severity = "Critical 🔴"
-        elif seconds < 300:
-            severity = "Warning 🟡"
-        else:
-            severity = "Stable 🟢"
-
-    return render_template("index.html",
-                           prediction=prediction,
-                           severity=severity)
-
-#run logic 
+    return render_template("index.html")
 
 if __name__ == "__main__":
-    app.run(debug=True)
+    threading.Thread(target=monitor_loop, daemon=True).start()
+    socketio.run(app, debug=True, port=5000)
