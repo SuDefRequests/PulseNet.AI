@@ -3,259 +3,151 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>PulseNet AI | Network Fault Prediction</title>
-
-    <!-- Bootstrap -->
+    <title>PulseNet AI | Live NOC</title>
+    
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
-
-    <!-- Google Font -->
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
-
-    <!-- Emoji favicon -->
-    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>⚡</text></svg>">
-
+    <script src="https://cdn.socket.io/4.0.0/socket.io.min.js"></script>
+    
     <style>
-        body {
-            font-family: 'Inter', sans-serif;
-            min-height: 100vh;
-            transition: background 0.8s ease;
+        body { 
+            font-family: 'Inter', sans-serif; 
+            min-height: 100vh; 
+            transition: background 0.3s ease; 
+            display: flex; 
+            align-items: center; 
+            color: white; 
+            margin: 0; 
+            overflow-x: hidden; 
         }
 
-        body.stable-bg {
-            background: linear-gradient(135deg, #0f2027, #203a43, #2c5364);
+        .stable-bg { background: radial-gradient(circle, #0f2027, #020617); }
+        .critical-bg { background: radial-gradient(circle, #450a0a, #020617); }
+        
+        /* Responsive Glass Card */
+        .glass-card { 
+            background: rgba(255, 255, 255, 0.05); 
+            backdrop-filter: blur(15px); 
+            border-radius: 20px; 
+            padding: clamp(20px, 5vw, 40px); 
+            box-shadow: 0 25px 60px rgba(0,0,0,0.6); 
+            border: 1px solid rgba(255, 255, 255, 0.1); 
+            width: 100%;
+            margin-top: 20px;
+            margin-bottom: 20px;
         }
 
-        body.warning-bg {
-            background: linear-gradient(135deg, #3a2c00, #7a5c00, #b38600);
+        .app-title { font-weight: 800; letter-spacing: 2px; color: #38bdf8; text-transform: uppercase; }
+        .prediction-val { font-size: clamp(3rem, 10vw, 5.5rem); font-weight: 900; margin: 5px 0; letter-spacing: -2px; }
+        .metric-label { font-size: 0.7rem; text-transform: uppercase; opacity: 0.5; letter-spacing: 1px; }
+        .metric-val { font-family: 'Courier New', monospace; font-weight: bold; color: #38bdf8; font-size: 1.1rem; }
+
+        /* Smooth Log Animations */
+        .log-box { 
+            background: rgba(0,0,0,0.4); 
+            border-radius: 12px; 
+            height: 150px; 
+            padding: 15px; 
+            margin-top: 20px; 
+            text-align: left; 
+            overflow: hidden; 
+            font-size: 0.75rem; 
+            border: 1px solid rgba(255,255,255,0.05); 
         }
 
-        body.critical-bg {
-            background: linear-gradient(135deg, #2b0000, #6b0000, #b30000);
-        }
+        .log-entry { font-family: monospace; margin-bottom: 4px; border-left: 3px solid #22c55e; padding-left: 10px; animation: slideIn 0.2s forwards; }
+        @keyframes slideIn { from { opacity: 0; transform: translateX(-10px); } to { opacity: 1; transform: translateX(0); } }
+        .log-danger { border-left-color: #ef4444; color: #fca5a5; }
 
-        .app-header {
-            text-align: center;
-            color: white;
-            margin-bottom: 30px;
-        }
-
-        .glass-card {
-            background: rgba(255,255,255,0.12);
-            backdrop-filter: blur(16px);
-            border-radius: 18px;
-            padding: 30px;
-            color: white;
-            box-shadow: 0 12px 35px rgba(0,0,0,0.35);
-        }
-
-        .form-control {
-            background-color: rgba(255,255,255,0.08) !important;
-            border: 1px solid rgba(255,255,255,0.25);
-            color: #fff;
-        }
-
-        .form-control:focus {
-            background-color: rgba(255,255,255,0.12) !important;
-            border-color: #00c6ff;
-            box-shadow: 0 0 0 0.15rem rgba(0,198,255,0.25);
-            color: #fff;
-        }
-
-        input[type=number]::-webkit-inner-spin-button,
-        input[type=number]::-webkit-outer-spin-button {
-            -webkit-appearance: none;
-        }
-
-        input[type=number] {
-            -moz-appearance: textfield;
-        }
-
-        .error {
-            font-size: 0.8rem;
-            color: #ff9a9a;
-        }
-
-        .btn-primary {
-            background: linear-gradient(135deg, #00c6ff, #0072ff);
-            border: none;
-            font-weight: 600;
-        }
-
-        .btn-primary:disabled {
-            background: gray;
-        }
-
-        .result-box {
-            margin-top: 25px;
-            padding: 20px;
-            border-radius: 14px;
-        }
-
-        .critical {
-            background: rgba(255,0,0,0.25);
-            border-left: 6px solid #ff4d4d;
-        }
-
-        .warning {
-            background: rgba(255,193,7,0.28);
-            border-left: 6px solid #ffc107;
-        }
-
-        .stable {
-            background: rgba(0,255,127,0.25);
-            border-left: 6px solid #00ff9d;
-        }
-
-        /* Scrollbar */
-        ::-webkit-scrollbar {
-            width: 8px;
-        }
-        ::-webkit-scrollbar-track {
-            background: transparent;
-        }
-        ::-webkit-scrollbar-thumb {
-            background: rgba(255,255,255,0.25);
-            border-radius: 10px;
+        /* Responsive adjustments for mobile */
+        @media (max-width: 576px) {
+            .metric-val { font-size: 0.9rem; }
+            .log-box { height: 120px; }
         }
     </style>
-
-    <script>
-        function validateInput(input, min, max, errorId) {
-            const value = parseFloat(input.value);
-            const error = document.getElementById(errorId);
-            const button = document.getElementById("submitBtn");
-
-            if (input.value === "") {
-                error.textContent = "";
-                button.disabled = true;
-                return;
-            }
-
-            if (isNaN(value) || value < min || value > max) {
-                error.textContent = `Enter value between ${min} and ${max}`;
-                button.disabled = true;
-            } else {
-                error.textContent = "";
-                checkAllValid();
-            }
-        }
-
-        function checkAllValid() {
-            const errors = document.querySelectorAll(".error");
-            const button = document.getElementById("submitBtn");
-            for (let e of errors) {
-                if (e.textContent !== "") {
-                    button.disabled = true;
-                    return;
-                }
-            }
-            button.disabled = false;
-        }
-    </script>
 </head>
 
-<body class="
-{% if severity %}
-    {% if 'Critical' in severity %}critical-bg
-    {% elif 'Warning' in severity %}warning-bg
-    {% else %}stable-bg{% endif %}
-{% else %}
-    stable-bg
-{% endif %}
- d-flex align-items-center justify-content-center">
+<body id="mainBody" class="stable-bg">
 
-<div class="container px-3 px-md-0">
+<div class="container d-flex justify-content-center">
+    <div class="row w-100 justify-content-center">
+        <div class="col-12 col-sm-10 col-md-8 col-lg-6 col-xl-5">
+            
+            <div class="glass-card text-center">
+                <div class="app-title mb-1">⚡ PulseNet AI</div>
+                <div class="mb-3"><span id="pill" class="badge rounded-pill bg-success px-4 py-2">LIVE MONITORING</span></div>
 
-    <div class="app-header">
-        <h1 class="fw-bold">⚡ PulseNet AI</h1>
-        <p class="text-light">AI-driven Network Fault Prediction System</p>
-    </div>
-
-    <div class="row justify-content-center">
-        <div class="col-12 col-sm-10 col-md-6">
-
-            <div class="glass-card">
-
-                <form method="POST">
-                    <div class="mb-3">
-                        <label class="form-label">Flow Duration (ms)</label>
-                        <input type="number" class="form-control"
-                               name="flow_duration"
-                               oninput="validateInput(this,1,5000,'dErr')" required>
-                        <div id="dErr" class="error"></div>
+                <div class="metric-label">Estimated Time to Failure</div>
+                <div id="pred" class="prediction-val">--s</div>
+                
+                <div class="row g-3 mt-1">
+                    <div class="col-6">
+                        <div class="metric-label">Flow Dur</div>
+                        <div id="dur" class="metric-val">--ms</div>
                     </div>
-
-                    <div class="mb-3">
-                        <label class="form-label">Flow Bytes/s</label>
-                        <input type="number" class="form-control"
-                               name="flow_bytes"
-                               oninput="validateInput(this,1000,2000000,'bErr')" required>
-                        <div id="bErr" class="error"></div>
+                    <div class="col-6">
+                        <div class="metric-label">Packets / Sec</div>
+                        <div id="pkts" class="metric-val">--</div>
                     </div>
-
-                    <div class="mb-3">
-                        <label class="form-label">Flow Packets/s</label>
-                        <input type="number" class="form-control"
-                               name="flow_packets"
-                               oninput="validateInput(this,1000,2000000,'pErr')" required>
-                        <div id="pErr" class="error"></div>
+                    <div class="col-6">
+                        <div class="metric-label">Bytes / Sec</div>
+                        <div id="bytes" class="metric-val">--</div>
                     </div>
-
-                    <div class="mb-4">
-                        <label class="form-label">Packet Length Mean</label>
-                        <input type="number" step="0.1" class="form-control"
-                               name="packet_length"
-                               oninput="validateInput(this,0.1,10,'lErr')" required>
-                        <div id="lErr" class="error"></div>
-                    </div>
-
-                    <button id="submitBtn" class="btn btn-primary w-100" disabled>
-                        Analyze Network
-                    </button>
-                </form>
-
-                {% if prediction %}
-                <div class="result-box
-                    {% if 'Critical' in severity %}critical
-                    {% elif 'Warning' in severity %}warning
-                    {% else %}stable{% endif %}">
-                    <h5>{{ prediction }}</h5>
-                    <strong>Status:</strong> {{ severity }}
-                </div>
-                {% endif %}
-
-                <div class="accordion accordion-flush mt-4">
-                    <div class="accordion-item bg-transparent border-0">
-                        <h2 class="accordion-header">
-                            <button class="accordion-button collapsed bg-transparent text-white"
-                                    type="button" data-bs-toggle="collapse"
-                                    data-bs-target="#explain">
-                                🔍 How does PulseNet AI work?
-                            </button>
-                        </h2>
-                        <div id="explain" class="accordion-collapse collapse">
-                            <div class="accordion-body small text-light">
-                                <ul>
-                                    <li>📊 Reads network traffic metrics</li>
-                                    <li>🧠 AI learns failure patterns</li>
-                                    <li>⏱️ Predicts time before failure</li>
-                                    <li>🚦 Shows risk level visually</li>
-                                </ul>
-                            </div>
-                        </div>
+                    <div class="col-6">
+                        <div class="metric-label">Pkt Len Mean</div>
+                        <div id="len" class="metric-val">--</div>
                     </div>
                 </div>
 
-                <p class="text-center text-light small mt-4">
-                    ℹ️ Demo system trained on representative network data
-                </p>
-
+                <div class="log-box" id="log">
+                    <div class="log-entry">[SYSTEM] AI Engine engaged...</div>
+                </div>
             </div>
+
         </div>
     </div>
 </div>
 
-<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+    const socket = io();
+    const body = document.getElementById('mainBody');
+    const logBox = document.getElementById('log');
+
+    socket.on('network_update', function(data) {
+        document.getElementById('pred').innerText = data.seconds + "s";
+        document.getElementById('dur').innerText = data.f_dur + "ms";
+        document.getElementById('pkts').innerText = data.f_pkts.toLocaleString();
+        document.getElementById('bytes').innerText = data.f_bytes.toLocaleString();
+        document.getElementById('len').innerText = data.p_len;
+        
+        const pill = document.getElementById('pill');
+        if (data.status === 'DANGER') {
+            body.className = 'critical-bg';
+            pill.className = "badge rounded-pill bg-danger px-4 py-2";
+            pill.innerText = "CRITICAL ALERT 🔴";
+            addLog("DANGER", data.seconds, data.f_pkts);
+        } else {
+            body.className = 'stable-bg';
+            pill.className = "badge rounded-pill bg-success px-4 py-2";
+            pill.innerText = "SYSTEM STABLE 🟢";
+            addLog("STABLE", data.seconds, data.f_pkts);
+        }
+    });
+
+    function addLog(type, sec, pps) {
+        const div = document.createElement('div');
+        div.className = 'log-entry ' + (type === 'DANGER' ? 'log-danger' : '');
+        const time = new Date().toLocaleTimeString([], {hour12: false});
+        
+        if (type === 'DANGER') {
+            div.innerText = `[${time}] ALERT: Volumetric Attack (${pps} PPS). Failure in ${sec}s`;
+        } else {
+            div.innerText = `[${time}] INFO: Traffic nominal. Monitoring at ${pps} PPS.`;
+        }
+
+        logBox.prepend(div);
+        if (logBox.children.length > 8) logBox.removeChild(logBox.lastChild);
+    }
+</script>
 
 </body>
 </html>
